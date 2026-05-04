@@ -683,35 +683,51 @@ function parseHDC(data){
   return units;
 }
 
+// ══ MATCH FILE (ตอนอัปโหลด) ══
 function matchFile(fname){
-  fname=fname.toLowerCase();
-  for(var i=0;i<FILE_MAP.length;i++)
-    for(var j=0;j<FILE_MAP[i].keys.length;j++)
-      if(fname.indexOf(FILE_MAP[i].keys[j].toLowerCase())>=0)return FILE_MAP[i];
-  return null;
+  fname = fname.toLowerCase().trim();
+  var cleanFname = fname.replace(/\.(xlsx|xls|pdf|png|jpg|jpeg)$/i, '').trim();
+
+  // 1. หาแบบตรงเป๊ะใน FILE_MAP ก่อน (เช่น ถ้าพิมพ์มาว่า "เบาหวาน")
+  for(var i=0; i<FILE_MAP.length; i++){
+    for(var j=0; j<FILE_MAP[i].keys.length; j++){
+      if(cleanFname.indexOf(FILE_MAP[i].keys[j].toLowerCase()) >= 0) return FILE_MAP[i];
+    }
+  }
+
+  // 2. ถ้าไม่เจอใน FILE_MAP ให้ลองเทียบกับ G_KPIS ทั้งหมด
+  for(var i=0; i<G_KPIS.length; i++){
+     var kName = G_KPIS[i].name.toLowerCase();
+     if(kName.length >= 10 && cleanFname.indexOf(kName) >= 0) {
+         return {kw: G_KPIS[i].name, lbl: G_KPIS[i].name.substring(0,40), tgt: G_KPIS[i].target||0 };
+     }
+  }
+
+  return null; 
 }
 
-// ══ UNIT DATA LOOKUP ══
-// ใช้ exact → substring (>=8 ตัว) → ตัดคำยาว (>=10 ตัว)
-// ไม่ตัดคำสั้น เพื่อป้องกัน false-positive เช่น "ตาย" match ผิด KPI
+// ══ UNIT DATA LOOKUP (ตอนดึงไปแสดงในตาราง) ══
 function findUnitData(kpiName){
-  // 1. exact match
-  if(UNIT_DATA[kpiName])return{kw:kpiName,units:UNIT_DATA[kpiName]};
-  // 2. key เป็น substring ของ kpiName (key ยาว >= 8 ตัว)
-  for(var k in UNIT_DATA){
-    if(k.length>=8&&kpiName.indexOf(k)>=0)return{kw:k,units:UNIT_DATA[k]};
+  // 1. ตรงกันแบบเป๊ะๆ (ถ้าตั้งชื่อมาเหมือนเป๊ะ หรือก๊อปปี้จาก Dashboard มาเป๊ะๆ)
+  if(UNIT_DATA[kpiName]) return {kw:kpiName, units:UNIT_DATA[kpiName]};
+
+  // 2. ถ้ามาจาก FILE_MAP 
+  for(var i=0; i<FILE_MAP.length; i++){
+     if(kpiName === FILE_MAP[i].kw && UNIT_DATA[FILE_MAP[i].kw]) {
+         return {kw: FILE_MAP[i].kw, units: UNIT_DATA[FILE_MAP[i].kw]};
+     }
   }
-  // 3. kpiName เป็น substring ของ key (kpiName ยาว >= 8 ตัว)
+
+  // 3. ไม่มีการเดาคำมั่ว บังคับว่าชื่อไฟล์ต้องอยู่ในชื่อ KPI จริงๆ
   for(var k in UNIT_DATA){
-    if(kpiName.length>=8&&k.indexOf(kpiName)>=0)return{kw:k,units:UNIT_DATA[k]};
+     var cleanK = k.replace(/\.(xlsx|xls)$/i, '').trim();
+     if(cleanK.length >= 10 && kpiName.indexOf(cleanK) >= 0) {
+         return {kw: k, units: UNIT_DATA[k]};
+     }
   }
-  // 4. แบ่งคำจาก key ยาว >= 10 ตัว (กัน false-positive จากคำสั้น)
-  for(var k in UNIT_DATA){
-    var words=k.split(/[\s,\/\-\(\)]+/);
-    for(var i=0;i<words.length;i++)
-      if(words[i].length>=10&&kpiName.indexOf(words[i])>=0)return{kw:k,units:UNIT_DATA[k]};
-  }
-  return null;
+
+  return null; 
+}
 }
 
 // ══ BUILD UNIT TABLE ══
