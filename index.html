@@ -351,9 +351,6 @@ td.det-cell{padding:0!important;border:none!important;}
 <script>
 // ══ KPI CLASSIFICATION DB ══
   // --- ส่วนเชื่อมต่อ Cloud (วางตรงนี้) ---
-const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycbyzCewSF0KXA3Ej5LRPhMSOXq3a8T_9AjXZfj49x7PG3roFTTRiDm6oDCUuGWpAhv0/exec"; 
-var IS_SYNCING = false;
-
 async function loadFromCloud() {
     try {
         const response = await fetch(CLOUD_API_URL);
@@ -374,15 +371,22 @@ async function loadFromCloud() {
         }
     } catch (e) { console.log("Cloud Load Error:", e); }
 }
+const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycby4Q7GnAUqJGRXTmi8BKlTCGCE6ifZa_o2c1HmCNSxMr2VEDuVbJJtD508joweDyjh3zQ/exec"; 
+var IS_SYNCING = false;
 
 async function saveToCloud() {
     if (IS_SYNCING || !G_KPIS.length) return;
     IS_SYNCING = true;
     const btn = document.getElementById('btn-cloud-sync');
     if(btn) btn.innerHTML = "⏳ กำลังบันทึก...";
+    
     try {
         await fetch(CLOUD_API_URL, {
             method: "POST",
+            redirect: "follow", // เพิ่มบรรทัดนี้ เพื่อให้เว็บตามไปที่ Google อนุญาต
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8" // เพิ่มบรรทัดนี้ ให้ Google ไม่บล็อก
+            },
             body: JSON.stringify({
                 type: "SAVE_ALL",
                 year: G_YEAR,
@@ -393,8 +397,11 @@ async function saveToCloud() {
         });
         if(btn) btn.innerHTML = "✅ บันทึกสำเร็จ";
         setTimeout(() => { if(btn) btn.innerHTML = "☁️ บันทึกไปที่ Cloud"; }, 2000);
-    } catch (e) { alert("Error: " + e.message); }
-    finally { IS_SYNCING = false; }
+    } catch (e) { 
+        alert("Error: " + e.message); 
+    } finally { 
+        IS_SYNCING = false; 
+    }
 }
 // ------------------------------------
 
