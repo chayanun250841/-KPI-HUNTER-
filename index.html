@@ -112,12 +112,16 @@ td.det-cell{padding:0!important;border:none!important;}
 .ocr-btns button{padding:8px 18px;border-radius:7px;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
 @media print{
   .topbar button,.tabs-wrap,.det-dz,.det-files,.no-print,.print-modal{display:none!important;}
-  .tp{display:block!important;}
+  /* ซ่อนแท็บทั้งหมดก่อน แล้วโชว์เฉพาะแท็บที่เปิดทำงาน (act) */
+  .tp{display:none!important;}
+  .tp.act{display:block!important;}
   .no-print-sec{display:none!important;}
   body{background:#fff;font-size:11px;}
-  .con{padding:5px;max-width:100%;}
-  .sh{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  #tab-report{display:block!important;}
+  .con{padding:0;max-width:100%;}
+  .sh{-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-after:avoid;}
+  /* ป้องกันตารางและกล่องข้อมูล ขาดกลางหน้ากระดาษ */
+  table, tr, td, th, .card { page-break-inside: avoid; }
+  h2, h3, h4 { page-break-after: avoid; }
 }
 @media(max-width:720px){.ov-grid{grid-template-columns:1fr 1fr;}.topbar{flex-direction:column;align-items:flex-start;}}
 /* Admin modal */
@@ -336,6 +340,11 @@ td.det-cell{padding:0!important;border:none!important;}
     <label class="psi"><input type="checkbox" id="prn-sso" checked><span>🏠 ส่วนที่ 1 : ตัวชี้วัด สสอ./รพ.สต.</span></label>
     <label class="psi"><input type="checkbox" id="prn-both" checked><span>🤝 ส่วนที่ 2 : ตัวชี้วัดร่วมกัน</span></label>
     <label class="psi"><input type="checkbox" id="prn-rph" checked><span>🏥 สรุปโรงพยาบาล</span></label>
+    
+    <div style="border-top:2px dashed #e0e9f7; margin: 12px 0; padding-top: 12px;"></div>
+    <label class="psi" style="background:#f0fdf4; border-radius:8px; padding:10px;"><input type="checkbox" id="prn-details" checked><span style="color:#166534;font-weight:700;">📋 แสดงตารางผลงานรายหน่วย (รพ.สต.) ลงลึก</span></label>
+    <div style="border-top:2px dashed #e0e9f7; margin: 12px 0; padding-top: 12px;"></div>
+
     <label class="psi"><input type="checkbox" id="prn-pass"><span>✅ รายการที่ผ่านเกณฑ์ทั้งหมด</span></label>
     <label class="psi"><input type="checkbox" id="prn-fail"><span>❌ รายการที่ไม่ผ่านเกณฑ์</span></label>
     <label class="psi"><input type="checkbox" id="prn-budget"><span>💰 จัดสรรงบประมาณ</span></label>
@@ -1525,48 +1534,84 @@ function ocrDownloadExcel(){
 
 // ══ PRINT FUNCTIONS ══
 function showPrintDialog(){document.getElementById('print-modal').style.display='flex';}
+
 function selectAllPrint(v){
-  ['prn-cards','prn-sso','prn-both','prn-rph','prn-pass','prn-fail','prn-budget']
+  ['prn-cards','prn-sso','prn-both','prn-rph','prn-pass','prn-fail','prn-budget','prn-details']
   .forEach(function(id){var cb=document.getElementById(id);if(cb)cb.checked=v;});
 }
+
 function doPrint(){
   document.getElementById('print-modal').style.display='none';
+  
+  var showDetails = document.getElementById('prn-details').checked;
 
-  // 1. Expand ALL per-unit detail rows
-  document.querySelectorAll('.kpi-detail-row').forEach(function(r){r.classList.add('open');});
-  document.querySelectorAll('.togbtn').forEach(function(b){b.textContent='🔼 ย่อ';});
+  // 1. จัดการตารางย่อย รพ.สต. (กาง/หุบ ตามที่ติ๊กเลือก)
+  document.querySelectorAll('.kpi-detail-row').forEach(function(r){
+      if(showDetails) r.classList.add('open');
+      else r.classList.remove('open');
+  });
+  document.querySelectorAll('.togbtn').forEach(function(b){
+      b.textContent = showDetails ? '🔼 ย่อ' : '📊 ขยาย';
+  });
 
   // 2. บันทึก state แท็บเดิม แล้วซ่อนทุกแท็บก่อน
   var allTabs=document.querySelectorAll('.tp');
   var wasAct=[];
   allTabs.forEach(function(t){wasAct.push(t.classList.contains('act'));t.classList.remove('act');});
 
-  // 3. แสดงเฉพาะ tab-report (มี psec-sso + psec-both + psec-rph ข้างใน)
+  // 3. แสดงเฉพาะ tab-report
   document.getElementById('tab-report').classList.add('act');
 
-  // 4. ซ่อนส่วนที่ไม่ได้เลือกใน tab-report
+  // 4. ซ่อน/แสดง section ย่อย พร้อมตัดหน้ากระดาษเมื่อขึ้นเรื่องใหม่
   var inner={'cards':'psec-cards','sso':'psec-sso','both':'psec-both','rph':'psec-rph'};
   for(var k in inner){
     var cb=document.getElementById('prn-'+k);
     var el=document.getElementById(inner[k]);
-    if(el){el.classList[cb&&cb.checked?'remove':'add']('no-print-sec');}
+    if(el){
+        if(cb&&cb.checked) {
+            el.classList.remove('no-print-sec');
+            el.classList.add('print-section-active'); // คลาสไว้ช่วยตัดหน้ากระดาษ
+        } else {
+            el.classList.add('no-print-sec');
+            el.classList.remove('print-section-active');
+        }
+    }
   }
 
-  // 5. แสดงแท็บแยก (pass / fail / budget) ถ้าเลือก
-  if(document.getElementById('prn-pass').checked)document.getElementById('tab-pass').classList.add('act');
-  if(document.getElementById('prn-fail').checked)document.getElementById('tab-fail').classList.add('act');
-  if(document.getElementById('prn-budget').checked)document.getElementById('tab-budget').classList.add('act');
+  // สั่งแยกหน้ากระดาษ (Page break) ให้ทุก Section ที่ปริ้น
+  var activeSecs = document.querySelectorAll('.print-section-active');
+  activeSecs.forEach(function(sec, idx) {
+      if(idx > 0 && sec.id !== 'psec-cards') sec.style.pageBreakBefore = 'always';
+      else sec.style.pageBreakBefore = 'auto';
+  });
+
+  // 5. แสดงแท็บแยกถ้าถูกเลือก พร้อมให้ขึ้นหน้าใหม่เสมอ
+  ['pass','fail','budget'].forEach(function(tab){
+      if(document.getElementById('prn-'+tab) && document.getElementById('prn-'+tab).checked){
+          var tEl = document.getElementById('tab-'+tab);
+          tEl.classList.add('act');
+          tEl.style.pageBreakBefore = 'always';
+      }
+  });
 
   setTimeout(function(){
     window.print();
-    // 6. Restore tabs + no-print-sec + detail rows
-    allTabs.forEach(function(t,i){t.classList[wasAct[i]?'add':'remove']('act');});
-    ['psec-cards','psec-sso','psec-both','psec-rph'].forEach(function(id){
-      var el=document.getElementById(id);if(el)el.classList.remove('no-print-sec');
+    // 6. Restore ทุกอย่างกลับมาเหมือนเดิมหลังปริ้นเสร็จ
+    allTabs.forEach(function(t,i){
+        t.classList[wasAct[i]?'add':'remove']('act');
+        t.style.pageBreakBefore = ''; 
     });
+    for(var k in inner){
+        var el=document.getElementById(inner[k]);
+        if(el){
+            el.classList.remove('no-print-sec');
+            el.classList.remove('print-section-active');
+            el.style.pageBreakBefore = '';
+        }
+    }
     document.querySelectorAll('.kpi-detail-row').forEach(function(r){r.classList.remove('open');});
     document.querySelectorAll('.togbtn').forEach(function(b){b.textContent='📊 ขยาย';});
-  },200);
+  },300);
 }
 
 // ══ ADMIN GATE ══
