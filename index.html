@@ -183,6 +183,7 @@ td.det-cell{padding:0!important;border:none!important;}
       <button onclick="showPrintDialog()" class="no-print" style="background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 12px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">🖨️ พิมพ์</button>
       <button onclick="showAdminLogin()" class="no-print" id="btn-admin" style="background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 12px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700" title="ปรับตัวชี้วัด — ต้อง Login Admin">⚙️ Admin</button>
       <button onclick="goUpload()" class="no-print" style="background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);color:#fff;padding:7px 12px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">📂 ไฟล์ใหม่</button>
+      <button onclick="saveToCloud()" id="btn-cloud-sync" class="no-print" style="background:#059669;color:#fff;padding:7px 12px;border-radius:7px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700">☁️ บันทึกไปที่ Cloud</button>
     </div>
   </div>
   <div class="con">
@@ -349,6 +350,57 @@ td.det-cell{padding:0!important;border:none!important;}
 
 <script>
 // ══ KPI CLASSIFICATION DB ══
+  // --- ส่วนเชื่อมต่อ Cloud (วางตรงนี้) ---
+const CLOUD_API_URL = "https://script.google.com/macros/s/AKfycbyzCewSF0KXA3Ej5LRPhMSOXq3a8T_9AjXZfj49x7PG3roFTTRiDm6oDCUuGWpAhv0/exec"; 
+var IS_SYNCING = false;
+
+async function loadFromCloud() {
+    try {
+        const response = await fetch(CLOUD_API_URL);
+        const data = await response.json();
+        if (data && data.status === "ok") {
+            G_KPIS = data.kpis;
+            UNIT_DATA = data.unitData;
+            G_YEAR = data.year;
+            G_FNAME = data.fname;
+            G_KPIS.forEach(function(k){
+                var cl = CL(k.name);
+                k.reason = cl.r || '';
+                k.ref = cl.f || '';
+            });
+            document.getElementById('upload-screen').style.display = 'none';
+            restoreUnits();
+            render(G_KPIS, G_YEAR, G_FNAME);
+        }
+    } catch (e) { console.log("Cloud Load Error:", e); }
+}
+
+async function saveToCloud() {
+    if (IS_SYNCING || !G_KPIS.length) return;
+    IS_SYNCING = true;
+    const btn = document.getElementById('btn-cloud-sync');
+    if(btn) btn.innerHTML = "⏳ กำลังบันทึก...";
+    try {
+        await fetch(CLOUD_API_URL, {
+            method: "POST",
+            body: JSON.stringify({
+                type: "SAVE_ALL",
+                year: G_YEAR,
+                fname: G_FNAME,
+                kpis: G_KPIS,
+                unitData: UNIT_DATA
+            })
+        });
+        if(btn) btn.innerHTML = "✅ บันทึกสำเร็จ";
+        setTimeout(() => { if(btn) btn.innerHTML = "☁️ บันทึกไปที่ Cloud"; }, 2000);
+    } catch (e) { alert("Error: " + e.message); }
+    finally { IS_SYNCING = false; }
+}
+// ------------------------------------
+
+// แล้วตามด้วยโค้ดเดิมของคุณ...
+// ══ KPI CLASSIFICATION DB ══
+var DB=[ ... ]
 var DB=[
   {w:'อัตราส่วนการตายมารดา',t:'rph',r:'',f:''},
   {w:'มีพัฒนาการสมวัย',t:'sso',r:'รพ.สต.คัดกรอง DSPM ใน Well Child Visit',f:'KPI ข้อ 2.1'},
@@ -1665,16 +1717,28 @@ function restoreUnits(){
   }catch(e){}
 }
 // Restore overrides ก่อน CL() ทำงาน
-restoreOverrides();
-try{
-  var sv=localStorage.getItem(KEY);
-  if(sv){var d=JSON.parse(sv);if(d&&d.kpis&&d.kpis.length){
-    d.kpis.forEach(function(k){var cl=CL(k.name);k.type=cl.t;k.reason=cl.r||'';k.ref=cl.f||'';});
-    document.getElementById('upload-screen').style.display='none';
-    restoreUnits(); // โหลด UNIT_DATA ก่อน render
-    render(d.kpis,d.year,d.fname);
-  }}
-}catch(ex){}
+// ของใหม่ (โหลดจาก Cloud ก่อน ถ้าไม่มีค่อยดูในเครื่อง)
+(async function() {
+    restoreOverrides();
+    await loadFromCloud(); // ดึงข้อมูลจาก Google Sheets
+    
+    if (!G_KPIS || G_KPIS.length === 0) {
+        try {
+            var sv = localStorage.getItem(KEY);
+            if(sv){
+                var d = JSON.parse(sv);
+                if(d && d.kpis && d.kpis.length){
+                    d.kpis.forEach(function(k){
+                        var cl=CL(k.name); k.type=cl.t; k.reason=cl.r||''; k.ref=cl.f||'';
+                    });
+                    document.getElementById('upload-screen').style.display='none';
+                    restoreUnits();
+                    render(d.kpis,d.year,d.fname);
+                }
+            }
+        } catch(ex){}
+    }
+})();
 </script>
 </body>
 </html>
