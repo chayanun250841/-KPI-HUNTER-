@@ -980,13 +980,14 @@ function handleDetailFiles(files){
           var eid='chip-kw-'+kw.replace(/[^a-zA-Z0-9ก-ฮ]/g,'_');
           var old=document.getElementById(eid);if(old)old.remove();
           var safeKw2=kw.replace(/'/g,"\\'");
-          ch.innerHTML+='<span class="fchip" id="'+eid+'">✅ '+lbl+' ('+units.length+' หน่วย) <button onclick="editOCRChip(\''+safeKw2+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#1e40af" title="แก้ไขข้อมูล">✏️</button></span>';
+          ch.innerHTML+='<span class="fchip" id="'+eid+'">✅ '+lbl+' ('+units.length+' หน่วย) <button onclick="editOCRChip(\''+safeKw2+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#1e40af" title="แก้ไขข้อมูล">✏️</button><button onclick="deleteUnitData(\''+safeKw2+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#dc2626" title="ลบข้อมูล">🗑️</button></span>';
           if(document.getElementById('dashboard').style.display!=='none'){
             var ev=G_KPIS.filter(evaled);
             var sso=ev.filter(function(k){return k.type==='sso';});
             var rph=ev.filter(function(k){return k.type==='rph';});
             var both=ev.filter(function(k){return k.type==='both';});
             renderAllTabs(ev,sso,both,rph,ev.filter(isP),ev.filter(isF));
+            saveToCloud();
           }
         }else{ch.innerHTML+='<span class="fchip" style="background:#fff7ed;color:#c2410c">⚠️ '+lbl+' (ไม่พบข้อมูลรายหน่วย — ลองเปิดไฟล์ตรวจสอบ format)</span>';}
       }catch(e2){ch.innerHTML+='<span class="fchip" style="background:#fee2e2;color:#991b1b">❌ '+file.name+' — '+e2.message+'</span>';}
@@ -1381,15 +1382,49 @@ function confirmOCR(){
   var oldId='chip-kw-'+kw.replace(/[^a-zA-Z0-9ก-ฮ]/g,'_');
   var old=document.getElementById(oldId);
   if(old)old.remove();
-  ch.innerHTML+='<span class="fchip" id="'+oldId+'" style="background:#d1fae5;color:#065f46">✅ '+lbl+
-    ' ('+valid.length+' หน่วย) <button onclick="editOCRChip(\''+kw+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#065f46" title="แก้ไขข้อมูล">✏️</button></span>';
+var safeKw3 = kw.replace(/'/g,"\\'");
+ch.innerHTML+='<span class="fchip" id="'+oldId+'" style="background:#d1fae5;color:#065f46">✅ '+lbl+' ('+valid.length+' หน่วย) <button onclick="editOCRChip(\''+safeKw3+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#065f46" title="แก้ไขข้อมูล">✏️</button><button onclick="deleteUnitData(\''+safeKw3+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#dc2626" title="ลบข้อมูล">🗑️</button></span>';
   if(document.getElementById('dashboard').style.display!=='none'){
     var ev=G_KPIS.filter(evaled);
     renderAllTabs(ev,ev.filter(function(k){return k.type==='sso';}),ev.filter(function(k){return k.type==='both';}),ev.filter(function(k){return k.type==='rph';}),ev.filter(isP),ev.filter(isF));
+     saveToCloud();
   }
 }
 
 // เปิด modal แก้ไขข้อมูลที่ยืนยันไปแล้ว
+  // ฟังก์ชันสำหรับลบข้อมูลรายหน่วย
+function deleteUnitData(kw) {
+    // 1. เช็คสิทธิ์ Admin
+    if (!ADMIN_LOGGED) {
+        requireAdmin(function() { deleteUnitData(kw); });
+        return;
+    }
+    // 2. คอนเฟิร์มก่อนลบ
+    if (confirm('⚠️ ต้องการลบข้อมูลรายหน่วยของไฟล์/ตัวชี้วัด "' + kw + '" ใช่หรือไม่?')) {
+        // ลบออกจากหน่วยความจำ
+        delete UNIT_DATA[kw];
+        saveUnits(); // บันทึกลง LocalStorage
+        
+        // อัปเดต UI (ลบ Chip ออกจากหน้าจอ)
+        var safeId = 'chip-kw-' + kw.replace(/[^a-zA-Z0-9ก-ฮ]/g, '_');
+        var oldChip = document.getElementById(safeId);
+        if (oldChip) oldChip.remove();
+        
+        // รีเฟรชตารางใหม่ (ให้ข้อมูลหายไปจากตาราง)
+        var ev = G_KPIS.filter(evaled);
+        renderAllTabs(
+            ev, 
+            ev.filter(function(k){return k.type==='sso';}), 
+            ev.filter(function(k){return k.type==='both';}), 
+            ev.filter(function(k){return k.type==='rph';}), 
+            ev.filter(isP), 
+            ev.filter(isF)
+        );
+        
+        // สั่งออโต้เซฟขึ้น Cloud
+        saveToCloud(); 
+    }
+}
 function editOCRChip(kw){
   if(!ADMIN_LOGGED){requireAdmin(function(){editOCRChip(kw);});return;}
   var existing=UNIT_DATA[kw];
@@ -1718,7 +1753,7 @@ function restoreUnits(){
       var lbl=meta[kw]?meta[kw].lbl:kw;
       var safeKw=kw.replace(/'/g,"\\'");
       var eid='chip-kw-'+kw.replace(/[^a-zA-Z0-9ก-ฮ]/g,'_');
-      ch.innerHTML+='<span class="fchip" id="'+eid+'">✅ '+lbl+' ('+units.length+' หน่วย) <button onclick="editOCRChip(\''+safeKw+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#1e40af" title="แก้ไขข้อมูล">✏️</button></span>';
+      ch.innerHTML+='<span class="fchip" id="'+eid+'">✅ '+lbl+' ('+units.length+' หน่วย) <button onclick="editOCRChip(\''+safeKw+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#1e40af" title="แก้ไขข้อมูล">✏️</button><button onclick="deleteUnitData(\''+safeKw+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;padding:0 0 0 4px;color:#dc2626" title="ลบข้อมูล">🗑️</button></span>';
     }
   }catch(e){}
 }
