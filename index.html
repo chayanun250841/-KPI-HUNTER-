@@ -112,16 +112,23 @@ td.det-cell{padding:0!important;border:none!important;}
 .ocr-btns button{padding:8px 18px;border-radius:7px;border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;}
 @media print{
   .topbar button,.tabs-wrap,.det-dz,.det-files,.no-print,.print-modal{display:none!important;}
-  /* ซ่อนแท็บทั้งหมดก่อน แล้วโชว์เฉพาะแท็บที่เปิดทำงาน (act) */
   .tp{display:none!important;}
   .tp.act{display:block!important;}
   .no-print-sec{display:none!important;}
   body{background:#fff;font-size:11px;}
   .con{padding:0;max-width:100%;}
   .sh{-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-after:avoid;}
-  /* ป้องกันตารางและกล่องข้อมูล ขาดกลางหน้ากระดาษ */
-  table, tr, td, th, .card { page-break-inside: avoid; }
+  
+  /* ให้ตารางยาวๆ ทะลุหน้าได้ตามปกติ แต่ห้ามตัดขาดครึ่งบรรทัด */
+  table { page-break-inside: auto; }
+  tr, td, th, .card { page-break-inside: avoid; }
   h2, h3, h4 { page-break-after: avoid; }
+
+  /* 💡 มัดหัวข้อตัวชี้วัด + ตารางย่อย ให้อยู่ติดกันเสมอ */
+  tbody.kpi-group {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
 }
 @media(max-width:720px){.ov-grid{grid-template-columns:1fr 1fr;}.topbar{flex-direction:column;align-items:flex-start;}}
 /* Admin modal */
@@ -787,12 +794,17 @@ function buildUnitTable(kpiName,tgt,rid){
 // ══ EXPANDABLE KPI TABLE ══
 function buildKPITable(kpis,tid){
   if(!kpis.length)return'<p style="color:#64748b;padding:16px;font-size:13px">ไม่พบข้อมูล</p>';
-  var h='<table class="t1" id="'+tid+'"><thead><tr><th style="width:26px">#</th><th>ตัวชี้วัด</th><th style="width:120px">ผลงาน</th><th style="width:120px">เป้าหมาย</th><th style="width:80px">ประเมิน</th><th style="width:80px" class="no-print">รายละเอียด</th></tr></thead><tbody>';
+  var h='<table class="t1" id="'+tid+'"><thead><tr><th style="width:26px">#</th><th>ตัวชี้วัด</th><th style="width:120px">ผลงาน</th><th style="width:120px">เป้าหมาย</th><th style="width:80px">ประเมิน</th><th style="width:80px" class="no-print">รายละเอียด</th></tr></thead>';
+  
   kpis.forEach(function(k,i){
     var rid=tid+'-'+i;
     var hasD=findUnitData(k.name)!=null;
     var btn=hasD?'<button class="togbtn" onclick="toggleDet(\''+rid+'\')">📊 ขยาย</button>':'<span style="color:#cbd5e1;font-size:10px">—</span>';
     var bg=i%2===0?'#fff':'#f9fafb';
+    
+    // 💡 เริ่มมัดกลุ่มด้วย tbody.kpi-group
+    h+='<tbody class="kpi-group">';
+    
     h+='<tr style="background:'+bg+'" id="kr-'+rid+'">'+
       '<td style="color:#64748b;font-size:10px">'+k.num+'</td>'+
       '<td style="font-size:12px">'+k.name+'</td>'+
@@ -800,9 +812,14 @@ function buildKPITable(kpis,tid){
       '<td style="font-size:11px;color:#64748b">'+(k.target||'—')+'</td>'+
       '<td>'+PF(k.passfail)+'</td>'+
       '<td class="no-print">'+btn+'</td></tr>';
+      
+    // ถ้ามีข้อมูลย่อย ให้เอาใส่มาในกลุ่มเดียวกันเลย
     if(hasD){var d=buildUnitTable(k.name,k.target,rid);if(d)h+=d;}
+    
+    // 💡 ปิดกลุ่ม
+    h+='</tbody>';
   });
-  return h+'</tbody></table>';
+  return h+'</table>';
 }
 function toggleDet(rid){
   var row=document.getElementById('kdr-'+rid);if(!row)return;
